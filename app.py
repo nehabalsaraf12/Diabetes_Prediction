@@ -33,7 +33,7 @@ FEATURES = [
 st.markdown(
     """
     <style>
-    #MainMenu, footer, header { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; }
     .stApp { background: linear-gradient(160deg, #eaf4fb 0%, #f4f8fb 45%, #e9f7f3 100%); }
     .block-container { max-width: 860px; padding-top: 1.5rem; }
 
