@@ -142,7 +142,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 @st.cache_resource(show_spinner="Loading model...")
 def load_model():
     base = Path(__file__).resolve().parent
-    candidates = [base / "diabetes.pkl", Path.cwd() / "diabetes.pkl"]
+    candidates = [base / "diabetes_prediction.pkl", Path.cwd() / "diabetes.pkl"]
     # fall back to searching the repo for any file named diabetes.pkl
     candidates += list(base.rglob("diabetes.pkl"))
 
