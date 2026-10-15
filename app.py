@@ -1,8 +1,12 @@
 import pickle
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 # ------------------------------------------------------------------
 # Page config
@@ -96,6 +100,7 @@ div[data-testid="stFormSubmitButton"] button:hover {
     margin-bottom: 1.2rem;
 }
 .result.high { background: linear-gradient(135deg, #e03131, #ff6b6b); }
+.result.mid  { background: linear-gradient(135deg, #f08c00, #ffa94d); }
 .result.low  { background: linear-gradient(135deg, #0ca678, #38d9a9); }
 .result .icon  { font-size: 3rem; line-height: 1; }
 .result .title { font-size: 1.5rem; font-weight: 700; margin-top: .4rem; color: #ffffff; }
@@ -137,28 +142,19 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------
-# Load model (cached) - searches several locations for diabetes.pkl
+# Load models (cached)
 # ------------------------------------------------------------------
-@st.cache_resource(show_spinner="Loading model...")
-def load_model():
-    base = Path(__file__).resolve().parent
-    candidates = [base / "diabetes_prediction.pkl", Path.cwd() / "diabetes.pkl"]
-    # fall back to searching the repo for any file named diabetes.pkl
-    candidates += list(base.rglob("diabetes.pkl"))
+BASE_DIR = Path(__file__).resolve().parent
 
-    for path in candidates:
-        if path.exists():
-            with open(path, "rb") as f:
-                return pickle.load(f)
-
-    st.error(
-        "❌ `diabetes.pkl` was not found in the repository. "
-        f"Files in app folder: {[p.name for p in base.iterdir()]}"
-    )
-    st.stop()
-
-
-model = load_model()
+FEATURES = [
+    "age",
+    "hypertension",
+    "heart_disease",
+    "smoking_history",
+    "bmi",
+    "HbA1c_level",
+    "blood_glucose_level",
+]
 
 # Encoding used while training (alphabetical label encoding of smoking_history)
 SMOKING_MAP = {
@@ -169,15 +165,38 @@ SMOKING_MAP = {
     "Never": 4,
     "Not Current": 5,
 }
-FEATURES = [
-    "age",
-    "hypertension",
-    "heart_disease",
-    "smoking_history",
-    "bmi",
-    "HbA1c_level",
-    "blood_glucose_level",
-]
+
+IMPROVED_K = 15
+
+
+@st.cache_resource(show_spinner="Loading model (first run only)...")
+def load_models():
+    """Returns (original_model, improved_model).
+
+    The original KNN was trained on UNSCALED data, so blood glucose (range 80-300)
+    dominates the distance and the other inputs barely matter. The pickle stores its
+    training data, so we rebuild the same KNN with StandardScaler for better results.
+    """
+    model_path = BASE_DIR / "diabetes.pkl"
+    if not model_path.exists():
+        st.error(
+            "`diabetes.pkl` was not found next to app.py. "
+            f"Files here: {sorted(p.name for p in BASE_DIR.iterdir())}"
+        )
+        st.stop()
+
+    with open(model_path, "rb") as f:
+        original = pickle.load(f)
+
+    X = pd.DataFrame(np.asarray(original._fit_X), columns=FEATURES)
+    y = np.asarray(original._y)
+    improved = make_pipeline(
+        StandardScaler(), KNeighborsClassifier(n_neighbors=IMPROVED_K)
+    ).fit(X, y)
+    return original, improved
+
+
+original_model, improved_model = load_models()
 
 
 # ------------------------------------------------------------------
@@ -249,7 +268,11 @@ with left:
             hypertension = st.selectbox("Hypertension", ["No", "Yes"])
             heart_disease = st.selectbox("Heart disease", ["No", "Yes"])
             smoking = st.selectbox("Smoking history", list(SMOKING_MAP.keys()), index=0)
-            st.markdown("&nbsp;", unsafe_allow_html=True)
+            model_choice = st.selectbox(
+                "Model",
+                ["Improved (scaled KNN)", "Original (your .pkl)"],
+                help="Improved = same training data with feature scaling, so every input matters.",
+            )
 
         submitted = st.form_submit_button("🔍 Predict Diabetes Risk")
 
@@ -284,42 +307,38 @@ with right:
             columns=FEATURES,
         )
 
-        prediction = int(model.predict(input_df)[0])
-        proba = model.predict_proba(input_df)[0]
-        k = model.n_neighbors
-        votes = int(round(proba[1] * k))
-        pct = int(proba[1] * 100)
+        use_improved = model_choice.startswith("Improved")
+        model = improved_model if use_improved else original_model
+        k = IMPROVED_K if use_improved else original_model.n_neighbors
 
-        if prediction == 1:
-            st.markdown(
-                f"""
-<div class="result high">
-    <div class="icon">⚠️</div>
-    <div class="title">High Risk of Diabetes</div>
-    <div class="desc">The model predicts this profile is likely diabetic.</div>
-    <div class="vote-wrap">
-        <div class="vote-label">{votes} of {k} nearest patients are diabetic ({pct}%)</div>
-        <div class="vote-bar"><div class="vote-fill" style="width:{max(pct, 4)}%"></div></div>
-    </div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
+        p_diab = float(model.predict_proba(input_df)[0][1])
+        votes = int(round(p_diab * k))
+        pct = int(round(p_diab * 100))
+
+        if p_diab >= 0.5:
+            css, icon, title = "high", "⚠️", "High Risk of Diabetes"
+            desc = "This profile closely resembles patients who have diabetes."
+        elif p_diab >= 0.2:
+            css, icon, title = "mid", "🟠", "Moderate Risk of Diabetes"
+            desc = "This profile partly resembles patients with diabetes. Consider a check-up."
         else:
-            st.markdown(
-                f"""
-<div class="result low">
-    <div class="icon">✅</div>
-    <div class="title">Low Risk of Diabetes</div>
-    <div class="desc">The model predicts this profile is likely non-diabetic.</div>
+            css, icon, title = "low", "✅", "Low Risk of Diabetes"
+            desc = "This profile mostly resembles patients without diabetes."
+
+        st.markdown(
+            f"""
+<div class="result {css}">
+    <div class="icon">{icon}</div>
+    <div class="title">{title}</div>
+    <div class="desc">{desc}</div>
     <div class="vote-wrap">
-        <div class="vote-label">{votes} of {k} nearest patients are diabetic ({pct}%)</div>
+        <div class="vote-label">Risk score: {pct}% &nbsp;|&nbsp; {votes} of {k} most similar patients had diabetes</div>
         <div class="vote-bar"><div class="vote-fill" style="width:{max(pct, 4)}%"></div></div>
     </div>
 </div>
 """,
-                unsafe_allow_html=True,
-            )
+            unsafe_allow_html=True,
+        )
 
         b_txt, b_cls = bmi_status(bmi)
         h_txt, h_cls = hba1c_status(hba1c)
