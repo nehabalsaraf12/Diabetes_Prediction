@@ -35,7 +35,8 @@ st.markdown(
 <style>
 #MainMenu, footer { visibility: hidden; }
 .stApp { background: linear-gradient(160deg, #eaf4fb 0%, #f4f8fb 45%, #e9f7f3 100%); }
-.block-container { max-width: 1100px; padding-top: 2rem; padding-bottom: 2rem; }
+.block-container { max-width: 1100px; padding-top: 5rem; padding-bottom: 2rem; }
+[data-testid="stHeader"] { background: transparent; }
 
 .hero {
     background: linear-gradient(120deg, #0f766e, #0e7490, #1d4ed8);
