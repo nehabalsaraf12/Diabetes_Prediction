@@ -8,6 +8,6 @@ A machine learning web application that predicts whether a person is likely to h
 - KNN → Regression
 - Streamlit (UI and deployment)
 
-**Live Link → https://diabetesprediction-nzogmveecpv8nqx3vtmgbz.streamlit.app/**
+**Live Link → https://diabetesprediction-enditurnsrhlfjzoenwapk.streamlit.app/**
 
 
