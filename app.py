@@ -177,16 +177,28 @@ def load_models():
     dominates the distance and the other inputs barely matter. The pickle stores its
     training data, so we rebuild the same KNN with StandardScaler for better results.
     """
-    model_path = BASE_DIR / "diabetes.pkl"
-    if not model_path.exists():
+    # Accept either file name, or any single .pkl placed next to app.py
+    candidates = [BASE_DIR / "diabetes_prediction.pkl", BASE_DIR / "diabetes.pkl"]
+    candidates += sorted(BASE_DIR.glob("*.pkl"))
+    model_path = next((p for p in candidates if p.exists()), None)
+
+    if model_path is None:
         st.error(
-            "`diabetes.pkl` was not found next to app.py. "
-            f"Files here: {sorted(p.name for p in BASE_DIR.iterdir())}"
+            "Model file not found. Put `diabetes_prediction.pkl` in the same folder as "
+            f"`app.py`. Files found here: {sorted(p.name for p in BASE_DIR.iterdir())}"
         )
         st.stop()
 
-    with open(model_path, "rb") as f:
-        original = pickle.load(f)
+    try:
+        with open(model_path, "rb") as f:
+            original = pickle.load(f)
+    except Exception as exc:  # corrupted file, Git LFS pointer, version mismatch...
+        st.error(
+            f"Could not load `{model_path.name}`: {type(exc).__name__}: {exc}\n\n"
+            "Make sure the file was uploaded to GitHub in full (about 6 MB) and that "
+            "requirements.txt pins scikit-learn==1.6.1."
+        )
+        st.stop()
 
     X = pd.DataFrame(np.asarray(original._fit_X), columns=FEATURES)
     y = np.asarray(original._y)
