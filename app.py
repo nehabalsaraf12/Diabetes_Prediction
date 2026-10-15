@@ -137,13 +137,25 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------
-# Load model (cached)
+# Load model (cached) - searches several locations for diabetes.pkl
 # ------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading model...")
 def load_model():
-    model_path = Path(__file__).parent / "diabetes.pkl"
-    with open(model_path, "rb") as f:
-        return pickle.load(f)
+    base = Path(__file__).resolve().parent
+    candidates = [base / "diabetes.pkl", Path.cwd() / "diabetes.pkl"]
+    # fall back to searching the repo for any file named diabetes.pkl
+    candidates += list(base.rglob("diabetes.pkl"))
+
+    for path in candidates:
+        if path.exists():
+            with open(path, "rb") as f:
+                return pickle.load(f)
+
+    st.error(
+        "❌ `diabetes.pkl` was not found in the repository. "
+        f"Files in app folder: {[p.name for p in base.iterdir()]}"
+    )
+    st.stop()
 
 
 model = load_model()
